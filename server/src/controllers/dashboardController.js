@@ -16,6 +16,7 @@ import Dean from '../models/Dean.js';
 import Notification from '../models/Notification.js';
 import Event from '../models/Event.js';
 import LeaveRequest from '../models/LeaveRequest.js';
+import Exam from '../models/Exam.js';
 import { sendError } from '../utils/crud.js';
 
 const DAY_ORDER = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
@@ -79,13 +80,24 @@ export async function studentDashboard(req, res) {
       };
     });
 
+    const [assignments, exams, events] = await Promise.all([
+      Assignment.find({ rollno }).select('completionStatus -_id').lean(),
+      Exam.find().sort({ date: 1 }).limit(3).lean(),
+      Event.find({ $or: [{ audience: 'all' }, { audience: 'student' }] }).sort({ date: 1 }).limit(4).lean()
+    ]);
+
+    const subjectNames = Object.fromEntries(subjects.map((s) => [s.subjectId, s.name]));
+    const enrichedTimetable = timetable.map((slot) => ({
+      ...slot,
+      subjectName: subjectNames[slot.subjectId] || slot.subjectId
+    }));
+
     const today = dayName();
     const todaySubjects = timetable.filter((slot) => slot.day === today).map((slot) => slot.subjectId);
     const allotments = await FacultySubject.find({ subjectId: { $in: todaySubjects } }).lean();
     const faculty = await Faculty.find({ facultyId: { $in: allotments.map((a) => a.facultyId) } })
       .select('facultyId name -_id')
       .lean();
-    const subjectNames = Object.fromEntries(subjects.map((s) => [s.subjectId, s.name]));
     const todayFaculty = [...new Map(faculty.map((f) => [f.facultyId, f])).values()].map((f) => ({
       ...f,
       subjects: allotments
@@ -93,16 +105,29 @@ export async function studentDashboard(req, res) {
         .map((a) => subjectNames[a.subjectId] || a.subjectId)
     }));
 
-    timetable.sort(
+    enrichedTimetable.sort(
       (a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day) || a.time.localeCompare(b.time)
     );
+
+    const withSessions = attendance.filter((item) => item.total > 0);
+    const avgAttendance = withSessions.length
+      ? Math.round(withSessions.reduce((sum, item) => sum + item.percentage, 0) / withSessions.length)
+      : 0;
 
     res.json({
       student: { ...student, courseName: course?.name || '', semesterName: semester?.name || '' },
       attendance,
       announcements,
       todayFaculty,
-      timetable,
+      timetable: enrichedTimetable,
+      events,
+      exams,
+      quickStats: {
+        attendance: avgAttendance,
+        assignments: assignments.length,
+        pendingAssignments: assignments.filter((a) => a.completionStatus === 'Incomplete').length,
+        exams: exams.length
+      },
       today
     });
   } catch (error) {
