@@ -1,22 +1,43 @@
 import { useState } from 'react';
 import { Card, Empty } from './UI';
 
-const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+const DAYS = [
+  { key: 'SUNDAY', short: 'Sun' }, { key: 'MONDAY', short: 'Mon' },
+  { key: 'TUESDAY', short: 'Tue' }, { key: 'WEDNESDAY', short: 'Wed' },
+  { key: 'THURSDAY', short: 'Thu' }, { key: 'FRIDAY', short: 'Fri' },
+  { key: 'SATURDAY', short: 'Sat' }
+];
 
 export default function TimetableGrid({ slots = [], title = 'Time table' }) {
-  const [index, setIndex] = useState(new Date().getDay());
-  const day = DAYS[index];
-  const rows = slots.filter((slot) => slot.day === day).sort((a, b) => a.time.localeCompare(b.time));
-
-  const move = (step) => setIndex((value) => (value + step + 7) % 7);
+  const todayIndex = new Date().getDay();
+  const [index, setIndex] = useState(todayIndex);
+  const day = DAYS[index].key;
+  const rows = slots
+    .filter((slot) => slot.day === day)
+    .sort((a, b) => a.time.localeCompare(b.time));
 
   return (
     <Card className="timetable-card">
       <div className="timetable-head">
-        <button className="icon-btn" onClick={() => move(-1)} aria-label="Previous day">‹</button>
-        <h2>{title} — {day.charAt(0) + day.slice(1).toLowerCase()}</h2>
-        <button className="icon-btn" onClick={() => move(1)} aria-label="Next day">›</button>
+        <div>
+          <h2>{title}</h2>
+          <small>Select a day to view classes</small>
+        </div>
+        {index === todayIndex && <span className="badge primary">Today</span>}
       </div>
+
+      <div className="day-pills">
+        {DAYS.map((item, i) => (
+          <button
+            key={item.key}
+            className={`day-pill ${i === index ? 'active' : ''} ${i === todayIndex ? 'is-today' : ''}`}
+            onClick={() => setIndex(i)}
+          >
+            {item.short}
+          </button>
+        ))}
+      </div>
+
       {rows.length ? (
         <div className="table-wrap">
           <table>
@@ -26,7 +47,7 @@ export default function TimetableGrid({ slots = [], title = 'Time table' }) {
             <tbody>
               {rows.map((slot) => (
                 <tr key={slot._id}>
-                  <td>{slot.time}</td>
+                  <td><strong>{slot.time}</strong></td>
                   <td>{slot.subjectName || slot.subjectId || '—'}</td>
                   <td>{slot.roomno || '—'}</td>
                   <td>{slot.semesterId || '—'}</td>
@@ -35,7 +56,9 @@ export default function TimetableGrid({ slots = [], title = 'Time table' }) {
             </tbody>
           </table>
         </div>
-      ) : <Empty message={`No classes scheduled for ${day.toLowerCase()}`} />}
+      ) : (
+        <Empty message={`No classes scheduled for ${DAYS[index].short}`} />
+      )}
     </Card>
   );
 }
